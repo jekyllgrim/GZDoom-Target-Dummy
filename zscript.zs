@@ -1,4 +1,4 @@
-version "4.8.0"
+version "4.10"
 
 class ShootingRangeHandler : EventHandler
 {
@@ -14,11 +14,7 @@ class ShootingRangeHandler : EventHandler
 			if (dum)
 			{
 				dum.Warp(pmo, pmo.radius + dum.radius, 0, 0);
-				if (e.args[0] != 0)
-				{
-					console.printf("Dummy angle: %f | Angle to player: %f", dum.angle, dum.AngleTo(pmo));
-					dum.angle = pmo.angle + 180;
-				}
+				dum.angle = pmo.angle + 180;
 			}
 		}
 	}
@@ -98,7 +94,8 @@ class ShootingRangeDummy : Actor
 		src = source ?  source.GetTag() : "unknown";
 
         receivedDmg += damage;
-		hitangle = AngleTo(inflictor ? inflictor : source);
+		hitangle = DeltaAngle(self.angle, AngleTo(inflictor));
+		//console.printf("Angle: %.2f | Angle to inflictor: %.2f | Delta angle: %.2f", self.angle, AngleTo(inflictor), hitangle);
         dmgStaggerTime = 1;
 
 		dmgpos = pos + (0,0,height * 0.5);
@@ -116,6 +113,7 @@ class ShootingRangeDummy : Actor
 	override void PostBeginPlay()
 	{
 		super.PostBeginPlay();
+		angle = Normalize180(angle);
 	}
 
     override void Tick()
@@ -127,7 +125,7 @@ class ShootingRangeDummy : Actor
             dmgStaggerTime--;
             if (dmgStaggerTime <= 0)
             {
-		        console.printf("\c[Green]Target dummy received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])", receivedDmg, inf, src);
+				console.printfEx(PRINT_NOLOG, "\c[Green]Target dummy received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])", receivedDmg, inf, src);
 				SpawnDamageNumbers(receivedDmg);
 				StartSwing(receivedDmg);
 				
@@ -162,7 +160,7 @@ class DamageNumber : Actor
 
 	override void Tick()
 	{
-		SetZ(pos.z+0.5);
+		SetZ(pos.z+0.75);
 		if (GetAge() > 25)
 			A_FadeOut(0.05);
 	}

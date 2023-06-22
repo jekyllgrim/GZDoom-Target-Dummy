@@ -1,0 +1,1 @@
+CanvasTexture TargetDummyDamage 192 32

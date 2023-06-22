@@ -1,0 +1,21 @@
+Model ShootingRangeDummy
+{
+    path "models/dummy"
+    model 0 "dummy.obj"
+    skin 0 "dummy.png"
+    USEACTORPITCH
+    USEACTORROLL
+    angleoffset 90
+    scale 10 10 12
+
+    Frame AMRK A 0 0
+}
+
+Model DamageNumber
+{
+    model 0 "models/dummy/flat.obj"
+    skin 0 "TargetDummyDamage"
+    angleoffset 90
+
+    Frame AMRK A 0 0
+}

@@ -81,22 +81,31 @@ class ShootingRangeDummy : Actor
 	{
 		class<Actor> cls = classname;
 		if (!cls)
+		{
+			console.printf("%s is not a valid class name. Reverting to default dummy model.", classname);
 			return;
+		}
 		
 		let def = GetDefaultByType(cls);
+
+		if (!def.bISMONSTER)
+		{
+			console.printf("%s is not a monster class name. Reverting to default dummy model.", classname);
+			return;
+		}
+
 		if (def)
 		{
-			A_SetTranslation("WoodenTranslation");
-			SetTag(String.Format("%s %s", def.GetTag(), "target dummy"));
-			classhealth = def.GetMaxHealth();
-			health = def.GetMaxHealth();
-			A_SetSize(def.radius, def.height);
-			scale = def.scale;
 			spriteMainState = def.FindState("Missile");
 			if (!spriteMainState)
 				spriteMainState = def.FindState("Melee");
 			if (!spriteMainState)
-				spriteMainState = def.spawnstate;
+				spriteMainState = def.spawnstate;				
+			if (!spriteMainState)
+			{
+				console.printf("%s class does not have a valid spawn states. Reverting to default dummy model.", classname);
+				return;
+			}
 			sprite = spriteMainState.sprite;
 			frame = spriteMainState.frame;
 			bFLATSPRITE = true;
@@ -111,6 +120,13 @@ class ShootingRangeDummy : Actor
 				}
 				dstate = dstate.nextstate;
 			}
+
+			A_SetTranslation("WoodenTranslation");
+			SetTag(String.Format("%s %s", def.GetTag(), "target dummy"));
+			classhealth = def.GetMaxHealth();
+			health = def.GetMaxHealth();
+			A_SetSize(def.radius, def.height);
+			scale = def.scale;
 
 			bNORADIUSDMG = def.bNORADIUSDMG;
 			bBOSS = def.bBOSS;

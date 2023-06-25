@@ -4,17 +4,24 @@ class ShootingRangeHandler : EventHandler
 {
 	override void NetworkProcess(consoleEvent e)
 	{
-		if (e.name ~== "summonTargetDummy")
+		name eventname = e.name;
+		if (eventname == 'summonDummy' || e.name.IndexOf(eventname) >= 0)
 		{
 			let pmo = players[e.player].mo;
 			if (!pmo)
 				return;
 			
-			let dum = Actor.Spawn("ShootingRangeDummy", pmo.pos);
+			let dum = ShootingRangeDummy(Actor.Spawn("ShootingRangeDummy", pmo.pos));
 			if (dum)
 			{
 				dum.Warp(pmo, pmo.radius + dum.radius, 0, 0);
 				dum.angle = pmo.angle + 180;
+				array<string> cmdstring;
+				e.name.Split(cmdstring, ":");
+				if (cmdstring.Size() == 2)
+				{
+					dum.ApplyClassStyle(cmdstring[1]);
+				}
 			}
 		}
 	}
@@ -35,6 +42,11 @@ class ShootingRangeDummy : Actor
 	double hitDir;
 	double hitangle;
 	vector3 dmgpos;
+	double basepitch;
+	int classhealth;
+	state spriteMainState;
+	state spriteDeathState;	
+	int deadtics;
 
 	Default
 	{
@@ -47,6 +59,10 @@ class ShootingRangeDummy : Actor
 		+NOBLOOD
 		Radius 20;
 		Height 56;
+		Mass 100;
+		painsound "targetdummy/pain";
+		painchance 96;
+		Tag "Target dummy";		
 	}
 
 	static clearscope double LinearMap(double val, double source_min, double source_max, double out_min, double out_max, bool clampIt = false)
@@ -61,9 +77,53 @@ class ShootingRangeDummy : Actor
 		return d;
 	}
 
+	void ApplyClassStyle(name classname)
+	{
+		class<Actor> cls = classname;
+		if (!cls)
+			return;
+		
+		let def = GetDefaultByType(cls);
+		if (def)
+		{
+			A_SetTranslation("WoodenTranslation");
+			SetTag(String.Format("%s %s", def.GetTag(), "target dummy"));
+			classhealth = def.GetMaxHealth();
+			health = def.GetMaxHealth();
+			A_SetSize(def.radius, def.height);
+			scale = def.scale;
+			spriteMainState = def.FindState("Missile");
+			if (!spriteMainState)
+				spriteMainState = def.FindState("Melee");
+			if (!spriteMainState)
+				spriteMainState = def.spawnstate;
+			sprite = spriteMainState.sprite;
+			frame = spriteMainState.frame;
+			bFLATSPRITE = true;
+
+			let dstate = def.FindState("Death");
+			while (dstate)
+			{
+				if (!dstate.nextstate || dstate.tics == -1)
+				{
+					spriteDeathState = dstate;
+					break;
+				}
+				dstate = dstate.nextstate;
+			}
+
+			bNORADIUSDMG = def.bNORADIUSDMG;
+			bBOSS = def.bBOSS;
+			mass = def.mass;
+			painchance = def.painchance;
+			painsound = def.painsound;
+			deathsound = def.deathsound;
+		}
+	}
+
 	void StartSwing(int damage)
 	{
-		double swingSpeed = Clamp(damage * 0.006, -0.5, 0.5);				
+		double swingSpeed = Clamp(damage * 0.006, -0.5, 0.5) * LinearMap(mass, 100, 1000, 1, 0.1, true);	
 		double pitchFacFront = LinearMap(abs(hitangle), 0, 90, -1., 0., true);
 		double pitchFacBack = LinearMap(abs(hitangle), 90, 180, 0., 1., true);
 		pitchangVel = (swingspeed * swingSpeed * pitchFacFront) + (swingspeed * swingSpeed * pitchFacBack);
@@ -84,6 +144,10 @@ class ShootingRangeDummy : Actor
 				dnum.A_SpriteOffset(i * 8 * dnum.scale.x);
 				//string thisnum = dmgstring.Mid(i, 1);
 				dnum.frame = dmgstring.ByteAt(i) - int("0");// thisnum.ToInt();
+				if (!bSHOOTABLE)
+				{
+					dnum.scale.y *= 1.2;
+				}		
 			}
 		}
 	}
@@ -94,9 +158,14 @@ class ShootingRangeDummy : Actor
 		src = source ?  source.GetTag() : "unknown";
 
         receivedDmg += damage;
+		if (classhealth > 0)
+			classhealth -= damage;
+		
+		if (random[simpainch](1, 256) <= painchance)
+			A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
+
 		hitangle = DeltaAngle(self.angle, AngleTo(inflictor));
-		//console.printf("Angle: %.2f | Angle to inflictor: %.2f | Delta angle: %.2f", self.angle, AngleTo(inflictor), hitangle);
-        dmgStaggerTime = 1;
+		dmgStaggerTime = 1;
 
 		dmgpos = pos + (0,0,height * 0.5);
 		if (inflictor && inflictor != source)
@@ -120,27 +189,52 @@ class ShootingRangeDummy : Actor
     {        
         super.Tick();
 
+		if (deadtics > 0)
+		{
+			deadtics--;
+			if (deadtics == 0)
+			{
+				bSHOOTABLE = true;
+				sprite = spriteMainState.sprite;
+				frame = spriteMainState.frame;
+			}
+		}
+
         if (dmgStaggerTime > 0)
         {
             dmgStaggerTime--;
             if (dmgStaggerTime <= 0)
             {
-				console.printfEx(PRINT_NOLOG, "\c[Green]Target dummy received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])", receivedDmg, inf, src);
+				string died;
+				if (bFLATSPRITE && classhealth <= 0)
+				{
+					died = " \c[Red]and died";
+					A_StartSound(deathsound, CHAN_BODY, CHANF_NOSTOP);
+					classhealth = health;
+					bSHOOTABLE = false;
+					sprite = spriteDeathState.sprite;
+					frame = spriteDeathState.frame;
+					deadtics = 70;
+				}
+				else
+				{
+					StartSwing(receivedDmg);				
+					//if (receivedDmg > 15)
+					//	A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
+				}
 				SpawnDamageNumbers(receivedDmg);
-				StartSwing(receivedDmg);
-				
-                if (receivedDmg > 15)
-                    A_StartSound("targetdummy/pain", CHAN_BODY, CHANF_NOSTOP);
+
+				console.printfEx(PRINT_NOLOG, "\c[Green]%s received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])%s", GetTag(), receivedDmg, inf, src, died);
                 receivedDmg = 0;
             }
         }
 
 		pitchang = Clamp(pitchang += pitchangVel, -1.5, 1.5);
 		pitchangVel += -(DAMPING * pitchang) - pitchangVel*DAMPING;
-		pitch = pitchang * 180.0 / PI;
+		pitch = pitchang * 180.0 / PI - (bFLATSPRITE ? 90 : 0);
 		rollang = Clamp(rollang += rollangVel, -1.2, 1.2);
 		rollangVel += -(DAMPING * rollang) - rollangVel*DAMPING;
-		roll = rollang * 180.0 / PI;
+		roll = rollang * 180.0 / PI * (bFLATSPRITE ? -1 : 1);
     }
 
 	States {

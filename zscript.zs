@@ -4,8 +4,8 @@ class ShootingRangeHandler : EventHandler
 {
 	override void NetworkProcess(consoleEvent e)
 	{
-		name eventname = e.name;
-		if (eventname == 'summonDummy' || e.name.IndexOf(eventname) >= 0)
+		string name = e.name.MakeLower();
+		if (name == 'summondummy' || name.IndexOf('summondummy') >= 0)
 		{
 			let pmo = players[e.player].mo;
 			if (!pmo)

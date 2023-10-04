@@ -31,10 +31,11 @@ class ShootingRangeDummy : Actor
 {
 	const DAMPING = 0.032;
 	const PI = 3.14159;
-    int receivedDmg;
-    int dmgStaggerTime;
-    string inf;
-    string src;
+	class<Actor> prevInflictor;
+	int receivedDmg;
+	int dmgStaggerTime;
+	string inf;
+	string src;
 	double pitchangVel;
 	double pitchang;
 	double rollangVel;
@@ -128,6 +129,18 @@ class ShootingRangeDummy : Actor
 			A_SetSize(def.radius, def.height);
 			scale = def.scale;
 
+			/*A_ChangeModel("", flags: CMDL_HIDEMODEL);
+			TextureID frontTex = st.GetSpriteTexture(1);			
+			name frontTexName = TexMan.GetName(frontTex);
+			double frontTexX, frontTexY;
+			[frontTexX, frontTexY] = TexMan.GetSize(frontTex);
+			A_ChangeModel("", 1, skinIndex: 1, skin: frontTexName);
+			frontTex = st.GetSpriteTexture(8);			
+			frontTexName = TexMan.GetName(frontTex);
+			[frontTexX, frontTexY] = TexMan.GetSize(frontTex);
+			A_ChangeModel("FlexibleDummy", modelPath: "models/dummy", model: "flexibleDummy.obj", skinIndex: 1, skin: frontTexName, flags: CMDL_USESURFACESKIN);
+			scale = (frontTexX, frontTexY);*/
+
 			bNORADIUSDMG = def.bNORADIUSDMG;
 			bBOSS = def.bBOSS;
 			mass = def.mass;
@@ -168,28 +181,72 @@ class ShootingRangeDummy : Actor
 		}
 	}
 
+	void ReportDamage()
+	{
+		string died;
+		if (bFLATSPRITE && classhealth <= 0)
+		{
+			died = " \c[Red]and died";
+			A_StartSound(deathsound, CHAN_BODY, CHANF_NOSTOP);
+			classhealth = health;
+			bSHOOTABLE = false;
+			sprite = spriteDeathState.sprite;
+			frame = spriteDeathState.frame;
+			deadtics = 70;
+		}
+		else
+		{
+			StartSwing(receivedDmg);				
+			//if (receivedDmg > 15)
+			//	A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
+		}
+		SpawnDamageNumbers(receivedDmg);
+
+		console.printfEx(PRINT_NOLOG, "\c[Green]%s received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])%s", GetTag(), receivedDmg, inf, src, died);
+		receivedDmg = 0;
+	}
+
 	override int DamageMobj (Actor inflictor, Actor source, int damage, Name mod, int flags, double angle)
 	{
-		inf = inflictor ? inflictor.GetTag() : "unknown";
+		inf = inflictor ? inflictor.GetTag() : "something";
 		src = source ?  source.GetTag() : "unknown";
 
-        receivedDmg += damage;
+		Actor trueInflictor = inflictor ? inflictor : source ? source : null;
+
+		receivedDmg += damage;
 		if (classhealth > 0)
 			classhealth -= damage;
 		
 		if (random[simpainch](1, 256) <= painchance)
 			A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
 
-		hitangle = DeltaAngle(self.angle, AngleTo(inflictor));
-		dmgStaggerTime = 1;
-
-		dmgpos = pos + (0,0,height * 0.5);
-		if (inflictor && inflictor != source)
+		if (trueInflictor)
 		{
-			let diff = Level.Vec2Diff(dmgpos.xy, inflictor.pos.xy);
-			let dir = diff.unit();
-			dmgpos.xy += (dir * radius * 0.75);
-			dmgpos.z = inflictor.pos.z;
+			hitangle = DeltaAngle(self.angle, AngleTo(trueInflictor));
+			dmgpos = pos + (0,0,height * 0.5);
+
+			if (trueInflictor != source)
+			{
+				let diff = Level.Vec2Diff(dmgpos.xy, inflictor.pos.xy);
+				let dir = diff.unit();
+				dmgpos.xy += (dir * radius * 0.75);
+				dmgpos.z = inflictor.pos.z;
+			}
+
+			if (!prevInflictor || trueInflictor.GetClass() != prevInflictor)
+			{
+				ReportDamage();
+				prevInflictor = trueInflictor.GetClass();
+			}
+			else
+			{
+				dmgStaggerTime = 1;
+			}
+		}
+		else
+		{
+			ReportDamage();
+			prevInflictor = null;
 		}
 
 		return super.DamageMobj(inflictor, source, damage, mod, flags, angle);
@@ -201,9 +258,9 @@ class ShootingRangeDummy : Actor
 		angle = Normalize180(angle);
 	}
 
-    override void Tick()
-    {        
-        super.Tick();
+	override void Tick()
+	{
+		super.Tick();
 
 		if (deadtics > 0)
 		{
@@ -216,34 +273,14 @@ class ShootingRangeDummy : Actor
 			}
 		}
 
-        if (dmgStaggerTime > 0)
-        {
-            dmgStaggerTime--;
-            if (dmgStaggerTime <= 0)
-            {
-				string died;
-				if (bFLATSPRITE && classhealth <= 0)
-				{
-					died = " \c[Red]and died";
-					A_StartSound(deathsound, CHAN_BODY, CHANF_NOSTOP);
-					classhealth = health;
-					bSHOOTABLE = false;
-					sprite = spriteDeathState.sprite;
-					frame = spriteDeathState.frame;
-					deadtics = 70;
-				}
-				else
-				{
-					StartSwing(receivedDmg);				
-					//if (receivedDmg > 15)
-					//	A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
-				}
-				SpawnDamageNumbers(receivedDmg);
-
-				console.printfEx(PRINT_NOLOG, "\c[Green]%s received \c[Red]%d damage\c[Green] from \c[Cyan]%s\c[Green] (source: \c[Cyan]%s\c[Green])%s", GetTag(), receivedDmg, inf, src, died);
-                receivedDmg = 0;
-            }
-        }
+		if (dmgStaggerTime > 0)
+		{
+			dmgStaggerTime--;
+			if (dmgStaggerTime <= 0 && receivedDmg > 0)
+			{
+				ReportDamage();
+			}
+		}
 
 		pitchang = Clamp(pitchang += pitchangVel, -1.5, 1.5);
 		pitchangVel += -(DAMPING * pitchang) - pitchangVel*DAMPING;
@@ -251,7 +288,7 @@ class ShootingRangeDummy : Actor
 		rollang = Clamp(rollang += rollangVel, -1.2, 1.2);
 		rollangVel += -(DAMPING * rollang) - rollangVel*DAMPING;
 		roll = rollang * 180.0 / PI * (bFLATSPRITE ? -1 : 1);
-    }
+	}
 
 	States {
 	Spawn:

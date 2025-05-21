@@ -101,10 +101,10 @@ class ShootingRangeDummy : Actor
 			if (!spriteMainState)
 				spriteMainState = def.FindState("Melee");
 			if (!spriteMainState)
-				spriteMainState = def.spawnstate;				
+				spriteMainState = def.spawnstate;
 			if (!spriteMainState)
 			{
-				console.printf("%s class does not have a valid spawn states. Reverting to default dummy model.", classname);
+				console.printf("%s class does not have a valid Missile, Melee or Spawn state. Reverting to default dummy model.", classname);
 				return;
 			}
 			sprite = spriteMainState.sprite;
@@ -196,7 +196,7 @@ class ShootingRangeDummy : Actor
 		}
 		else
 		{
-			StartSwing(receivedDmg);				
+			StartSwing(receivedDmg);
 			//if (receivedDmg > 15)
 			//	A_StartSound(painsound, CHAN_BODY, CHANF_NOSTOP);
 		}
@@ -210,6 +210,11 @@ class ShootingRangeDummy : Actor
 	{
 		inf = inflictor ? inflictor.GetTag() : "something";
 		src = source ?  source.GetTag() : "unknown";
+
+		if (inflictor && flags & DMG_EXPLOSION)
+		{
+			inf = String.Format("an explosive %s", inf);
+		}
 
 		Actor trueInflictor = inflictor ? inflictor : source ? source : null;
 
@@ -233,7 +238,11 @@ class ShootingRangeDummy : Actor
 				dmgpos.z = inflictor.pos.z;
 			}
 
-			if (!prevInflictor || trueInflictor.GetClass() != prevInflictor)
+			if (flags & DMG_EXPLOSION)
+			{
+				ReportDamage();
+			}
+			else if (!prevInflictor || trueInflictor.GetClass() != prevInflictor)
 			{
 				ReportDamage();
 				prevInflictor = trueInflictor.GetClass();
